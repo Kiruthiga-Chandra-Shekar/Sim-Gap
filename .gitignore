@@ -1,0 +1,11 @@
+# Ignore heavy dataset binaries
+sample_data/
+*.tfrecord*
+*.h5
+*.hdf5
+
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
