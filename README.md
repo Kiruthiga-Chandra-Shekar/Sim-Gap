@@ -137,3 +137,15 @@ The sensor analysis module is currently an extensible foundation and does not ye
 
 Some combinations of aggressive controller parameters may result in unstable MuJoCo dynamics. Such failures are useful signals for future simulator-health diagnostics.
 
+## Citation
+
+If you use the FANUC Manipulation Dataset in your research or project, please cite the original paper:
+
+```bibtex
+@misc{zhu2023fanuc,
+  title={Fanuc Manipulation: A Dataset for Learning-based Manipulation with FANUC Mate 200iD Robot},
+  author={Zhu, Xinghao and Tian, Ran and Xu, Chenfeng and Huo, Mingxiao and Zhan, Wei and Tomizuka, Masayoshi and Ding, Mingyu},
+  howpublished={\url{[https://sites.google.com/berkeley.edu/fanuc-manipulation](https://sites.google.com/berkeley.edu/fanuc-manipulation)}},
+  year={2023}
+}
+
