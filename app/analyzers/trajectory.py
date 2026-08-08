@@ -1,116 +1,112 @@
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import euclidean
-from fastdtw import fastdtw
+from scipy.spatial.distance import cdist
 
 
 class TrajectoryAnalyzer:
     """
-    Kinematic Sim2Real Gap Analyzer.
-    Computes trajectory alignment error, DTW distance, and joint-level drift
-    between simulation and real robot telemetry.
+    Analyzes physical trajectory divergence between real robot telemetry 
+    and simulated environment outputs using Dynamic Time Warping (DTW).
     """
 
-    def __init__(self):
-        pass
-
-    def compute_gap_metrics(
-        self, sim_df: pd.DataFrame, real_df: pd.DataFrame
-    ) -> dict:
+    def compute_dtw_alignment(self, sim_data: np.ndarray, real_data: np.ndarray):
         """
-        Calculates full suite of Sim2Real gap metrics across joint space 
-        and end-effector space.
-        
-        Assumes DataFrames are already time-aligned (e.g. via loader.align_trajectories).
+        Computes dynamic time warping path to align sim and real time-series 
+        independently of constant or variable execution latency.
         """
-        metrics = {}
+        N, M = len(sim_data), len(real_data)
+        cost_matrix = cdist(sim_data, real_data, metric="euclidean")
 
-        # 1. Joint Position RMSE and Max Error
-        joint_cols = [c for c in sim_df.columns if "joint_" in c and "_pos" in c]
-        if joint_cols:
-            joint_rmse_list = []
-            for col in joint_cols:
-                if col in real_df.columns:
-                    err = sim_df[col].values - real_df[col].values
-                    rmse = np.sqrt(np.mean(err**2))
-                    max_err = np.max(np.abs(err))
-                    metrics[f"rmse/{col}"] = float(rmse)
-                    metrics[f"max_err/{col}"] = float(max_err)
-                    joint_rmse_list.append(rmse)
+        # Cumulative cost matrix initialization
+        D = np.full((N + 1, M + 1), np.inf)
+        D[0, 0] = 0.0
 
-            if joint_rmse_list:
-                metrics["summary/mean_joint_pos_rmse"] = float(np.mean(joint_rmse_list))
+        for i in range(1, N + 1):
+            for j in range(1, M + 1):
+                D[i, j] = cost_matrix[i - 1, j - 1] + min(
+                    D[i - 1, j],    # Insertion
+                    D[i, j - 1],    # Deletion
+                    D[i - 1, j - 1] # Match
+                )
 
-        # 2. Joint Velocity RMSE
-        vel_cols = [c for c in sim_df.columns if "joint_" in c and "_vel" in c]
+        # Backtrack optimal warping path
+        i, j = N, M
+        path_sim, path_real = [], []
+        while i > 0 and j > 0:
+            path_sim.append(i - 1)
+            path_real.append(j - 1)
+            idx = np.argmin([D[i - 1, j], D[i, j - 1], D[i - 1, j - 1]])
+            if idx == 0:
+                i -= 1
+            elif idx == 1:
+                j -= 1
+            else:
+                i -= 1
+                j -= 1
+
+        return path_sim[::-1], path_real[::-1]
+
+    def compute_gap_metrics(self, sim_df: pd.DataFrame, real_df: pd.DataFrame) -> dict:
+        # Extract joint position columns
+        pos_cols = [c for c in real_df.columns if "joint_" in c and "_pos" in c]
+        if not pos_cols:
+            pos_cols = [c for c in real_df.columns if "action" in c]
+
+        # Filter available columns common to both DataFrames
+        pos_cols = [c for c in pos_cols if c in sim_df.columns and c in real_df.columns]
+
+        sim_pos = sim_df[pos_cols].values
+        real_pos = real_df[pos_cols].values
+
+        # -------------------------------------------------------------
+        # 1. Compute Raw (Time-Shifted) Position RMSE
+        # -------------------------------------------------------------
+        min_len = min(len(sim_pos), len(real_pos))
+        raw_pos_rmse = float(np.sqrt(np.mean((sim_pos[:min_len] - real_pos[:min_len]) ** 2)))
+
+        # -------------------------------------------------------------
+        # 2. Compute Phase-Aligned (DTW) Spatial Position RMSE
+        # -------------------------------------------------------------
+        # Subsample traces if length > 400 frames to prevent DTW latency spikes
+        stride = max(1, len(sim_pos) // 400)
+        sim_sub = sim_pos[::stride]
+        real_sub = real_pos[::stride]
+
+        sub_sim_idx, sub_real_idx = self.compute_dtw_alignment(sim_sub, real_sub)
+
+        # Map subsampled DTW path back to full index array
+        sim_idx = np.array(sub_sim_idx) * stride
+        real_idx = np.array(sub_real_idx) * stride
+
+        aligned_diffs = sim_pos[sim_idx] - real_pos[real_idx]
+        dtw_aligned_pos_rmse = float(np.sqrt(np.mean(aligned_diffs ** 2)))
+
+        # -------------------------------------------------------------
+        # 3. Compute Velocity RMSE (Required for Kd Damping Diagnosis)
+        # -------------------------------------------------------------
+        vel_cols = [c for c in real_df.columns if "joint_" in c and "_vel" in c]
+        vel_cols = [c for c in vel_cols if c in sim_df.columns and c in real_df.columns]
+
         if vel_cols:
-            vel_rmse_list = []
-            for col in vel_cols:
-                if col in real_df.columns:
-                    err = sim_df[col].values - real_df[col].values
-                    rmse = np.sqrt(np.mean(err**2))
-                    metrics[f"rmse/{col}"] = float(rmse)
-                    vel_rmse_list.append(rmse)
+            sim_vel = sim_df[vel_cols].values
+            real_vel = real_df[vel_cols].values
+            aligned_vel_diffs = sim_vel[sim_idx] - real_vel[real_idx]
+            dtw_aligned_vel_rmse = float(np.sqrt(np.mean(aligned_vel_diffs ** 2)))
+        else:
+            # Fallback derivative estimate if velocity columns are absent
+            dt = 0.02
+            sim_vel_est = np.gradient(sim_pos, axis=0) / dt
+            real_vel_est = np.gradient(real_pos, axis=0) / dt
+            aligned_vel_diffs = sim_vel_est[sim_idx] - real_vel_est[real_idx]
+            dtw_aligned_vel_rmse = float(np.sqrt(np.mean(aligned_vel_diffs ** 2)))
 
-            if vel_rmse_list:
-                metrics["summary/mean_joint_vel_rmse"] = float(np.mean(vel_rmse_list))
-
-        # 3. End-Effector Cartesian Trajectory Gap (x, y, z)
-        ee_cols = ["ee_x", "ee_y", "ee_z"]
-        if all(col in sim_df.columns and col in real_df.columns for col in ee_cols):
-            sim_pos = sim_df[ee_cols].values
-            real_pos = real_df[ee_cols].values
-
-            # Pointwise Euclidean Distance at each timestamp
-            pointwise_dist = np.linalg.norm(sim_pos - real_pos, axis=1)
-
-            metrics["ee_cartesian/pos_rmse"] = float(
-                np.sqrt(np.mean(pointwise_dist**2))
-            )
-            metrics["ee_cartesian/max_divergence"] = float(np.max(pointwise_dist))
-            metrics["ee_cartesian/mean_divergence"] = float(np.mean(pointwise_dist))
-
-            # Dynamic Time Warping (DTW) on 3D Cartesian Path
-            dtw_distance, _ = fastdtw(sim_pos, real_pos, dist=euclidean)
-            metrics["ee_cartesian/dtw_distance"] = float(dtw_distance)
-
-        # 4. Joint Space Dynamic Time Warping (DTW)
-        if joint_cols:
-            sim_joints = sim_df[joint_cols].values
-            real_joints = real_df[joint_cols].values
-            dtw_joint_dist, _ = fastdtw(sim_joints, real_joints, dist=euclidean)
-            metrics["joint_space/dtw_distance"] = float(dtw_joint_dist)
-
-        return metrics
-
-
-# Standalone Verification Execution
-if __name__ == "__main__":
-    # Generate dummy test trajectories
-    t = np.linspace(0, 2.0, 100)
-    
-    sim_data = pd.DataFrame({
-        "timestamp": t,
-        "joint_1_pos": np.sin(t),
-        "joint_2_pos": np.cos(t),
-        "ee_x": 0.5 * t,
-        "ee_y": 0.2 * np.sin(t),
-        "ee_z": 0.1 * np.cos(t)
-    })
-
-    # Real data with slight noise + 20ms delay shift
-    real_data = pd.DataFrame({
-        "timestamp": t,
-        "joint_1_pos": np.sin(t - 0.02) + np.random.normal(0, 0.01, 100),
-        "joint_2_pos": np.cos(t - 0.02) + np.random.normal(0, 0.01, 100),
-        "ee_x": 0.5 * t + 0.005,
-        "ee_y": 0.2 * np.sin(t - 0.02),
-        "ee_z": 0.1 * np.cos(t - 0.02)
-    })
-
-    analyzer = TrajectoryAnalyzer()
-    results = analyzer.compute_gap_metrics(sim_data, real_data)
-
-    print("--- Trajectory Analyzer Test Output ---")
-    for key, val in results.items():
-        print(f"{key:35s}: {val:.5f}")
+        # -------------------------------------------------------------
+        # 4. Return Unified Metric Dictionary
+        # -------------------------------------------------------------
+        return {
+            "summary/raw_joint_pos_rmse": raw_pos_rmse,
+            "summary/mean_joint_pos_rmse": dtw_aligned_pos_rmse,  # DTW spatial error
+            "summary/mean_joint_vel_rmse": dtw_aligned_vel_rmse,  # Velocity error for Kd
+            "summary/latency_phase_penalty": raw_pos_rmse - dtw_aligned_pos_rmse,
+            "joint_space/dtw_distance": float(np.sum(np.abs(aligned_diffs))),
+        }

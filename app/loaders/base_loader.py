@@ -16,33 +16,35 @@ class BaseSim2RealLoader(ABC):
         """Loads real robot telemetry into a normalized DataFrame."""
         pass
 
-    def align_trajectories(
-        self, sim_df: pd.DataFrame, real_df: pd.DataFrame, target_fps: float = 50.0
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def align_trajectories(self, sim_df: pd.DataFrame, real_df: pd.DataFrame, fps: float = 50.0) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Aligns simulation and real trajectories onto a uniform time grid using linear interpolation.
+        Aligns simulation and real trajectories onto a uniform time grid.
         """
-        # Zero-offset timestamps
+        # Fallback timestamp creation if missing
+        if "timestamp" not in sim_df.columns:
+            sim_df["timestamp"] = np.arange(len(sim_df)) / fps
+        if "timestamp" not in real_df.columns:
+            real_df["timestamp"] = np.arange(len(real_df)) / fps
+
         sim_time = sim_df["timestamp"].values - sim_df["timestamp"].iloc[0]
         real_time = real_df["timestamp"].values - real_df["timestamp"].iloc[0]
 
-        # Define uniform time grid based on target FPS
         max_duration = min(sim_time[-1], real_time[-1])
-        num_samples = int(max_duration * target_fps)
-        common_time = np.linspace(0.0, max_duration, num_samples)
+        if max_duration <= 0:
+            return sim_df, real_df
 
-        aligned_sim = {"timestamp": common_time}
-        aligned_real = {"timestamp": common_time}
+        uniform_grid = np.arange(0, max_duration, 1.0 / fps)
 
-        # Interpolate numeric columns common to both DataFrames
-        common_cols = [
-            col
-            for col in sim_df.columns
-            if col != "timestamp" and col in real_df.columns
-        ]
+        sim_aligned = pd.DataFrame({"timestamp": uniform_grid})
+        real_aligned = pd.DataFrame({"timestamp": uniform_grid})
 
-        for col in common_cols:
-            aligned_sim[col] = np.interp(common_time, sim_time, sim_df[col].values)
-            aligned_real[col] = np.interp(common_time, real_time, real_df[col].values)
+        # Interpolate numeric columns onto uniform grid
+        for col in sim_df.select_dtypes(include=[np.number]).columns:
+            if col != "timestamp":
+                sim_aligned[col] = np.interp(uniform_grid, sim_time, sim_df[col].values)
 
-        return pd.DataFrame(aligned_sim), pd.DataFrame(aligned_real)
+        for col in real_df.select_dtypes(include=[np.number]).columns:
+            if col != "timestamp":
+                real_aligned[col] = np.interp(uniform_grid, real_time, real_df[col].values)
+
+        return sim_aligned, real_aligned

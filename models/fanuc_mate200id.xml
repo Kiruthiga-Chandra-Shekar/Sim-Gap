@@ -3,7 +3,7 @@
   <option gravity="0 0 -9.81" timestep="0.02" integrator="RK4"/>
 
   <default>
-    <joint damping="5.0" armature="0.1" stiffness="0"/>
+    <joint damping="5.0" armature="0.1" frictionloss="2.5" stiffness="0"/>
     <geom rgba="0.8 0.1 0.1 1"/>
   </default>
 
@@ -14,20 +14,42 @@
     <body name="base_link" pos="0 0 0">
       <geom name="base_geom" type="cylinder" size="0.1 0.1" rgba="0.2 0.2 0.2 1"/>
       
+      <!-- Joint 1: Base Rotation (J1) -->
       <body name="link_1" pos="0 0 0.1">
         <joint name="joint_1" type="hinge" axis="0 0 1" range="-2.96 2.96"/>
         <geom type="capsule" fromto="0 0 0 0 0 0.15" size="0.05"/>
         
+        <!-- Joint 2: Shoulder (J2) -->
         <body name="link_2" pos="0 0 0.15">
           <joint name="joint_2" type="hinge" axis="0 1 0" range="-1.74 2.53"/>
           <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.04"/>
           
+          <!-- Joint 3: Elbow (J3) -->
           <body name="link_3" pos="0 0 0.3">
             <joint name="joint_3" type="hinge" axis="0 1 0" range="-2.26 3.14"/>
-            <geom type="capsule" fromto="0 0 0 0.15 0 0" size="0.03"/>
+            <geom type="capsule" fromto="0 0 0 0.15 0 0" size="0.035"/>
             
-            <body name="ee_link" pos="0.15 0 0">
-              <geom name="ee_geom" type="sphere" size="0.02" rgba="0 0.8 0 1"/>
+            <!-- Joint 4: Wrist Roll (J4) -->
+            <body name="link_4" pos="0.15 0 0">
+              <joint name="joint_4" type="hinge" axis="1 0 0" range="-3.31 3.31"/>
+              <geom type="capsule" fromto="0 0 0 0.1 0 0" size="0.03"/>
+              
+              <!-- Joint 5: Wrist Pitch (J5) -->
+              <body name="link_5" pos="0.1 0 0">
+                <joint name="joint_5" type="hinge" axis="0 1 0" range="-2.18 2.18"/>
+                <geom type="capsule" fromto="0 0 0 0.05 0 0" size="0.025"/>
+                
+                <!-- Joint 6: Wrist Yaw / Flange (J6) -->
+                <body name="link_6" pos="0.05 0 0">
+                  <joint name="joint_6" type="hinge" axis="1 0 0" range="-6.28 6.28"/>
+                  <geom type="cylinder" size="0.02 0.01" rgba="0.3 0.3 0.3 1"/>
+                  
+                  <!-- End-Effector / Tool Flange Center -->
+                  <body name="ee_link" pos="0.02 0 0">
+                    <geom name="ee_geom" type="sphere" size="0.015" rgba="0 0.8 0 1"/>
+                  </body>
+                </body>
+              </body>
             </body>
           </body>
         </body>
@@ -36,8 +58,11 @@
   </worldbody>
 
   <actuator>
-    <position joint="joint_1" kp="50" ctrlrange="-2.96 2.96"/>
-    <position joint="joint_2" kp="50" ctrlrange="-1.74 2.53"/>
-    <position joint="joint_3" kp="50" ctrlrange="-2.26 3.14"/>
+    <position name="a1" joint="joint_1" kp="50.0" ctrlrange="-2.96 2.96"/>
+    <position name="a2" joint="joint_2" kp="50.0" ctrlrange="-1.74 2.53"/>
+    <position name="a3" joint="joint_3" kp="50.0" ctrlrange="-2.26 3.14"/>
+    <position name="a4" joint="joint_4" kp="50.0" ctrlrange="-3.31 3.31"/>
+    <position name="a5" joint="joint_5" kp="50.0" ctrlrange="-2.18 2.18"/>
+    <position name="a6" joint="joint_6" kp="50.0" ctrlrange="-6.28 6.28"/>
   </actuator>
 </mujoco>

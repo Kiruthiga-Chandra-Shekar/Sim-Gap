@@ -7,74 +7,89 @@ class Sim2RealDiagnosisEngine:
     to output actionable engineering diagnoses for domain randomization
     and physics calibration.
     """
-
-    def __init__(
-        self,
-        latency_threshold_ms: float = 30.0,
-        rmse_threshold_rad: float = 0.05,
-        noise_ratio_threshold: float = 3.0,
-    ):
-        self.latency_threshold_ms = latency_threshold_ms
-        self.rmse_threshold_rad = rmse_threshold_rad
-        self.noise_ratio_threshold = noise_ratio_threshold
-
-    def diagnose(self, combined_metrics: dict) -> dict:
-        diagnoses = []
+    
+    def diagnose(
+        self, 
+        metrics: dict, 
+        current_kp: float = 50.0, 
+        current_kd: float = 5.0,
+        max_kp: float = 250.0,
+        max_kd: float = 20.0
+    ) -> dict:
         recommendations = []
+        status = "PASS"
 
-        # 1. Latency & Delay Issues
-        latency = combined_metrics.get("timing/latency_ms", 0.0)
-        if abs(latency) > self.latency_threshold_ms:
-            diagnoses.append(
-                f"HIGH CONTROL LATENCY: Real robot lags simulation by {latency:.1f} ms."
-            )
+        # 1. Latency & Delay Tuning
+        latency_ms = metrics.get("timing/latency_ms", 0.0)
+        if latency_ms > 20.0:
+            status = "FAIL"
             recommendations.append(
-                f"Add action buffer delay of {int(abs(latency))} ms in simulation policy environment."
+                f"[LATENCY GAP] Real robot lags simulation by {latency_ms:.1f} ms. "
+                f"Actionable Fix: Insert an action buffer delay of {int(round(latency_ms))} ms into simulation environment."
             )
 
-        # 2. Tracking Error / Gain Discrepancy
-        mean_rmse = combined_metrics.get("summary/mean_joint_pos_rmse", 0.0)
-        if mean_rmse > self.rmse_threshold_rad:
-            diagnoses.append(
-                f"KINEMATIC DIVERGENCE: Joint position tracking RMSE ({mean_rmse:.4f} rad) exceeds limit."
-            )
+        # 2. Quantitative Proportional Gain (Kp) Tuning with Physical Cap Patch
+        mean_pos_rmse = metrics.get("summary/mean_joint_pos_rmse", 0.0)
+        if mean_pos_rmse > 0.05:
+            status = "FAIL"
+            if current_kp >= max_kp:
+                recommendations.append(
+                    f"[SYSTEMIC/DRIVE GAP] Joint position RMSE is high ({mean_pos_rmse:.4f} rad), "
+                    f"but Kp is already at physical ceiling ({current_kp:.1f} N·m/rad). "
+                    f"Actionable Fix: Do not increase Kp further. Add joint 'armature' (rotor inertia) "
+                    f"or 'frictionloss' to default joints in XML model to match real drive resistance."
+                )
+            else:
+                kp_adjustment_percent = min(max((mean_pos_rmse / 0.05) * 15.0, 10.0), 100.0)
+                target_kp = min(current_kp * (1.0 + kp_adjustment_percent / 100.0), max_kp)
+                delta_kp = target_kp - current_kp
+                recommendations.append(
+                    f"[STIFFNESS GAP] Joint position tracking RMSE is high ({mean_pos_rmse:.4f} rad). "
+                    f"Actionable Fix: Increase simulator joint actuator Kp by +{delta_kp:.1f} N·m/rad "
+                    f"(from {current_kp:.1f} to {target_kp:.1f} N·m/rad) to reduce compliance."
+                )
+
+        # 3. Quantitative Damping Gain (Kd) / Oscillation Tuning with Guard
+        mean_vel_rmse = metrics.get("summary/mean_joint_vel_rmse", 0.0)
+        if mean_vel_rmse > 0.5:
+            status = "FAIL"
+            if current_kd >= max_kd:
+                recommendations.append(
+                    f"[SYSTEMIC DAMPING] High velocity variance ({mean_vel_rmse:.4f} rad/s), "
+                    f"but Kd is at ceiling ({current_kd:.2f} N·m·s/rad). "
+                    f"Actionable Fix: Check trajectory synchronization or motor current ripple."
+                )
+            else:
+                target_kd = min(current_kd * 1.25, max_kd)
+                delta_kd = target_kd - current_kd
+                recommendations.append(
+                    f"[DAMPING GAP] High velocity variance/oscillation observed ({mean_vel_rmse:.4f} rad/s). "
+                    f"Actionable Fix: Increase joint damping Kd by +{delta_kd:.2f} N·m·s/rad "
+                    f"(from {current_kd:.2f} to {target_kd:.2f} N·m·s/rad) to stabilize transient response."
+                )
+
+        # 4. Success State Output
+        if status == "PASS":
             recommendations.append(
-                "Tune simulator PD gains (kp/kd) or model joint stiffness/backlash."
+                f"[SYSTEM CALIBRATED] Simulation metrics are within target tolerances! "
+                f"(Position RMSE: {mean_pos_rmse:.4f} rad <= 0.05, Latency: {latency_ms:.1f} ms <= 20.0 ms)."
             )
-
-        # 3. Sensor / Actuator Noise Mis-modeling
-        noise_ratios = [
-            v for k, v in combined_metrics.items() if "sensor_noise_ratio" in k
-        ]
-        if noise_ratios and max(noise_ratios) > self.noise_ratio_threshold:
-            diagnoses.append(
-                f"UNDER-MODELED SENSOR NOISE: Real hardware noise is {max(noise_ratios):.1f}x higher than simulation."
-            )
-            recommendations.append(
-                "Increase Gaussian observation noise during RL training domain randomization."
-            )
-
-        if not diagnoses:
-            diagnoses.append("EXCELLENT ALIGNMENT: Sim2Real gap is within calibrated limits.")
-            recommendations.append("Policy is ready for zero-shot real-world deployment.")
 
         return {
-            "diagnoses": diagnoses,
+            "status": status,
             "actionable_recommendations": recommendations,
-            "status": "PASS" if len(diagnoses) == 1 and "EXCELLENT" in diagnoses[0] else "FAIL",
         }
 
 
 if __name__ == "__main__":
     sample_metrics = {
-        "timing/latency_ms": 45.0,
-        "summary/mean_joint_pos_rmse": 0.08,
-        "sensor_noise_ratio/joint_1_vel": 4.2,
+        "timing/latency_ms": 12.0,
+        "summary/mean_joint_pos_rmse": 0.03,
+        "summary/mean_joint_vel_rmse": 0.2,
     }
 
     engine = Sim2RealDiagnosisEngine()
-    report = engine.diagnose(sample_metrics)
+    report = engine.diagnose(sample_metrics, current_kp=150.0, current_kd=8.0)
     print("DiagnosisEngine Test Output:")
     print("Status:", report["status"])
-    print("Diagnoses:", report["diagnoses"])
     print("Recommendations:", report["actionable_recommendations"])
