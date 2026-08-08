@@ -1,11 +1,11 @@
-# SimGap - A Sim2Real Diagnostic and Calibration Framework for Robotic Manipulation.
+# Sim-Gap - A Sim2Real Diagnostic and Calibration Framework for Robotic Manipulation.
 
-SimGap is an open-source robotics infrastructure tool for analyzing and diagnosing the gap between real robot behavior and simulated robot behavior.
+Sim-Gap is an open-source robotics infrastructure tool for analyzing and diagnosing the gap between real robot behavior and simulated robot behavior.
 
 Sim2Real remains one of the major challenges in robot learning and physical AI. A manipulation policy can perform well in simulation while behaving differently on a physical robot because of differences in:
 actuator dynamics, friction, damping, control gains, latency, sensor noise, timing, model simplifications, contact dynamics, robot hardware.
 
-SimGap is designed as a diagnostic layer between simulation and real-world robot data. Instead of treating Sim2Real as a single performance number, SimGap breaks the discrepancy down into measurable components such as:
+Sim-Gap is designed as a diagnostic layer between simulation and real-world robot data. Instead of treating Sim2Real as a single performance number, Sim-Gap breaks the discrepancy down into measurable components such as:
 
 - Joint-space trajectory error
 - Velocity tracking error
@@ -40,8 +40,7 @@ pip install -r requirements.txt
 Download the FANUC dataset from:
 https://sites.google.com/berkeley.edu/fanuc-manipulation
 
-Place it at this location in the Sim-Gap directory:
-sample_data/fanuc_manipulation/1.0.0/
+Create a new folder named 'sample_data' in the Sim-Gap directory and Extract the dataset to this location.
 
 Then launch:
 streamlit run app/dashboard.py
@@ -71,7 +70,7 @@ Observation
 Action
 - Cartesian-space action
 
-SimGap includes an RLDS-based loader that converts the dataset into a normalized internal trajectory representation before running the analysis. This keeps the rest of the framework independent of the original dataset format.
+Sim-Gap includes an RLDS-based loader that converts the dataset into a normalized internal trajectory representation before running the analysis. This keeps the rest of the framework independent of the original dataset format.
 
 ### Current Scope
 
@@ -79,7 +78,7 @@ This project currently focuses on trajectory replay and simulator calibration ra
 
 ### Trajectory Analysis
 
-SimGap compares simulated and real trajectories in joint space.The trajectory analyzer calculates metrics including:
+Sim-Gap compares simulated and real trajectories in joint space.The trajectory analyzer calculates metrics including:
 
 #### Raw Joint RMSE
 
@@ -87,11 +86,11 @@ Measures the direct difference between simulated and real joint trajectories (RM
 
 #### Dynamic Time Warping
 
-Robot executions may not progress through the same trajectory at exactly the same rate. SimGap therefore uses Dynamic Time Warping (DTW) to identify a better temporal correspondence between trajectories.
+Robot executions may not progress through the same trajectory at exactly the same rate. Sim-Gap therefore uses Dynamic Time Warping (DTW) to identify a better temporal correspondence between trajectories.
 
 ### Timing Analysis
 
-SimGap estimates temporal mismatch between simulation and real execution. The timing analyzer uses signal correlation to estimate the relative delay between trajectories. The framework can report:estimated command latency, real-loop jitter, maximum timestep, temporal alignment characteristics
+Sim-Gap estimates temporal mismatch between simulation and real execution. The timing analyzer uses signal correlation to estimate the relative delay between trajectories. The framework can report:estimated command latency, real-loop jitter, maximum timestep, temporal alignment characteristics
 
 For example:
 
@@ -101,7 +100,7 @@ A significant latency discrepancy can indicate that the simulator should incorpo
 
 ### Understanding the Results
 
-The current version of SimGap provides a first-pass Sim2Real diagnostic based on predefined thresholds for trajectory error, velocity error, and latency. A **FAIL** status means that one or more metrics are still outside the current acceptance range; it does not necessarily mean that the recommended parameter change was unsuccessful. The diagnosis may continue recommending higher **Kp or Kd** when position or velocity errors remain above their thresholds, even if previous adjustments have already improved the results. Since Sim2Real discrepancies can also come from friction, damping, inertia, actuator dynamics, model fidelity, and other factors, these recommendations should be treated as **candidate calibration actions rather than definitive causes**. Iterative baseline comparison, parameter sensitivity analysis, and residual-gap diagnosis are planned for the next phase.
+The current version of Sim-Gap provides a first-pass Sim2Real diagnostic based on predefined thresholds for trajectory error, velocity error, and latency. A **FAIL** status means that one or more metrics are still outside the current acceptance range; it does not necessarily mean that the recommended parameter change was unsuccessful. The diagnosis may continue recommending higher **Kp or Kd** when position or velocity errors remain above their thresholds, even if previous adjustments have already improved the results. Since Sim2Real discrepancies can also come from friction, damping, inertia, actuator dynamics, model fidelity, and other factors, these recommendations should be treated as **candidate calibration actions rather than definitive causes**. Iterative baseline comparison, parameter sensitivity analysis, and residual-gap diagnosis are planned for the next phase.
 
 ### Limitations
 
