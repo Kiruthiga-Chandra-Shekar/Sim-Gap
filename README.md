@@ -148,4 +148,6 @@ If you use the FANUC Manipulation Dataset in your research or project, please ci
   howpublished={\url{[https://sites.google.com/berkeley.edu/fanuc-manipulation](https://sites.google.com/berkeley.edu/fanuc-manipulation)}},
   year={2023}
 }
+```
 
+The dataset is released under the license terms outlined on the official Berkeley MSC Lab Dataset Page. Please review the licensing terms prior to redistribution or commercial use.
