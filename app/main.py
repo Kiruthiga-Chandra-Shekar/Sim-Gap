@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 from pathlib import Path
+import pandas as pd
 
 # Suppress TensorFlow C++ & oneDNN informational logs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -42,6 +43,10 @@ def run_pipeline(target_task: str = "close_drawer", episode_idx: int = 0):
     print(f"Available Tasks Found ({len(available_tasks)}) : {available_tasks}")
     print("--------------------------------------------------------------------------------")
 
+    if not available_tasks:
+        print(f"[ERROR] No tfrecord files found in {dataset_path}.")
+        return
+
     if target_task not in available_tasks:
         print(f"[WARNING] Target task '{target_task}' not found in directory.")
         print(f"Defaulting to first available task: '{available_tasks[0]}'\n")
@@ -54,7 +59,8 @@ def run_pipeline(target_task: str = "close_drawer", episode_idx: int = 0):
 
     # Load RLDS Data
     loader = RLDSFanucLoader(dataset_dir=dataset_path)
-    real_df = loader.load_real_data(split_name=target_task, episode_idx=episode_idx)
+    real_data_output = loader.load_real_data(split_name=target_task, episode_idx=episode_idx)
+    real_df = real_data_output[0] if isinstance(real_data_output, tuple) else real_data_output
     print(f"Real trajectory loaded: {len(real_df)} timesteps.")
 
     # Select joint positions or action signals
@@ -67,7 +73,10 @@ def run_pipeline(target_task: str = "close_drawer", episode_idx: int = 0):
 
     # Forward Replay in MuJoCo
     sim_runner = MuJoCoSimRunner(xml_path=model_path)
-    sim_df = sim_runner.run_replay(real_actions=real_actions)
+    sim_output = sim_runner.run_replay(real_actions=real_actions)
+    
+    # Safely unpack sim_df if run_replay returns a tuple (e.g., (df, metrics))
+    sim_df = sim_output[0] if isinstance(sim_output, tuple) else sim_output
 
     # Time Alignment
     sim_aligned, real_aligned = loader.align_trajectories(sim_df, real_df)
@@ -101,10 +110,5 @@ def run_pipeline(target_task: str = "close_drawer", episode_idx: int = 0):
 
 
 if __name__ == "__main__":
-    # You can pass ANY discovered task name here:
-    # 'close_drawer', 'disassembly', 'handover', 'open_drawer_pick_place',
-    # 'pick_and_place', 'pour_objects_from_one_cup_to_another_cup', 'press_stapler',
-    # 'push', 'separate_cups', 'stack_cups', 'sweep_cup'
-    
     target = sys.argv[1] if len(sys.argv) > 1 else "close_drawer"
     run_pipeline(target_task=target, episode_idx=0)
