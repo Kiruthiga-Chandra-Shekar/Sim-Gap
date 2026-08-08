@@ -44,7 +44,7 @@ Place it at this location in the Sim-Gap directory:
 sample_data/fanuc_manipulation/1.0.0/
 
 Then launch:
-streamlit run app/main.py
+streamlit run app/dashboard.py
 
 Open: http://localhost:8501 in your browser
 

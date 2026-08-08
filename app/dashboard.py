@@ -36,6 +36,8 @@ def get_available_tasks(dataset_path: str) -> list[str]:
         if "fanuc_manipulation-" in filename:
             task_part = filename.split("fanuc_manipulation-")[1]
             task_name = task_part.split(".tfrecord")[0]
+            # Sanitize any accidental whitespace
+            task_name = task_name.replace(" ", "").strip()
             tasks.add(task_name)
     return sorted(list(tasks)) if tasks else ["close_drawer"]
 
